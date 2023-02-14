@@ -81,7 +81,41 @@ def error_noise(y_noise_probability, y_noise, duration_noise, fixations):
     
     return results
 
-# shift
+# slope
+def error_slope(y_noise_probability, fixations, y_towards_probability = 0.5, d_slope = 0.1):
+    '''creates a random error moving a percentage of fixations '''
+
+    '''Parameters:
+    y_noise_probability: probability that slope error happens
+    fixations: fixations data
+    y_towards_probability: the probability that the distortion for the passage is downward sloping or upward sloping
+    d_slope: slope distortion parameter
+    '''
+    
+    results = []
+    rand = random.random()
+
+    if rand < y_towards_probability:
+    # the distortion for the passage is downward sloping
+
+        for fix in fixations:
+            if random.random() < y_noise_probability:
+                    x, y = fix[0], fix[1]
+                    results.append([x, y + (x*d_slope), fix[2]])
+            else:
+                results.append([fix[0], fix[1], fix[2]])
+
+    else:
+    # the distortion for the passage is upward sloping
+
+        for fix in fixations:
+            if random.random() < y_noise_probability:
+                    x, y = fix[0], fix[1]
+                    results.append([x, y - (x*d_slope), fix[2]])
+            else:
+                results.append([fix[0], fix[1], fix[2]])
+                
+    return results
 
 
 
