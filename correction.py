@@ -82,44 +82,133 @@ def error_noise(y_noise_probability, y_noise, duration_noise, fixations):
     return results
 
 # slope
-def error_slope(y_noise_probability, fixations, y_towards_probability = 0.5, d_slope = 0.1):
-    '''creates a random error moving a percentage of fixations '''
+def error_slope(error_magnitude, fixations):
+    '''creates an error moving a percentage of fixations '''
 
     '''Parameters:
-    y_noise_probability: probability that slope error happens
+    error_magnitude: range[0, 10], represent d_slope. error_magnitude == 0 -> d_slope == -0.1, upward sloping; error_magnitude == 10 -> d_slope == 0.1, downward sloping
     fixations: fixations data
-    y_towards_probability: the probability that the distortion for the passage is downward sloping or upward sloping
-    d_slope: slope distortion parameter
     '''
     
     results = []
-    rand = random.random()
+    d_slope = (-0.1) + (error_magnitude*0.02)
 
-    if rand < y_towards_probability:
-    # the distortion for the passage is downward sloping
-
-        for fix in fixations:
-            if random.random() < y_noise_probability:
-                    x, y = fix[0], fix[1]
-                    results.append([x, y + (x*d_slope), fix[2]])
-            else:
-                results.append([fix[0], fix[1], fix[2]])
-
-    else:
-    # the distortion for the passage is upward sloping
-
-        for fix in fixations:
-            if random.random() < y_noise_probability:
-                    x, y = fix[0], fix[1]
-                    results.append([x, y - (x*d_slope), fix[2]])
-            else:
-                results.append([fix[0], fix[1], fix[2]])
-                
+    for fix in fixations:
+        x, y = fix[0], fix[1]
+        results.append([x, y + (x*d_slope), fix[2]])
+    
     return results
 
+#shift
+def error_shift(error_magnitude, fixations):
+    '''creates an error moving a percentage of fixations '''
+
+    '''Parameters:
+    error_magnitude: range[0, 10], represent d_shift. error_magnitude == 0 -> d_shift == -1, upward shifting; error_magnitude == 10 -> d_shift == 1, downward shifting
+    fixations: fixations data
+    '''
+    
+    results = []
+    d_slope = (-1) + (error_magnitude*0.2)
+
+    for fix in range(len(fixations)):
+
+        x, y = fixations[fix][0], fixations[fix][1]
+
+        if fix == 0:
+            results.append([x, y, fixations[fix][2]])
+        else:
+            results.append([x, y + (fix * d_slope), fixations[fix][2]])
+    
+    return results
+
+#within-line regression
+def error_within_line_reg(error_probability, fixations):
+    '''creates an error moving a percentage of fixations '''
+
+    '''Parameters:
+    error_probability: probablity that formalizes the extent to which the reader performs within-line regressions
+    fixations: fixations data
+    '''
+    
+    results = []
+    adjusted_prob = error_probability*0.1*0.5
+    start_x = fixations[0][0]
+    
+    for fix in range(len(fixations)):
+
+        x, y = fixations[fix][0], fixations[fix][1]
+
+        if (fix > 0):
+            if (random.random() < adjusted_prob) and (x > fixations[fix-1][0]):
+                results.append([x - random.triangular(0, x-start_x, 0), y, fixations[fix][2]])
+            else:
+                results.append([x, y, fixations[fix][2]])
+        else:
+            results.append([x, y, fixations[fix][2]])
+    
+    return results
+
+#between-line regression
+def error_between_line_reg(error_probability, fixations, aois):
+    '''creates an error moving a percentage of fixations '''
+
+    '''Parameters:
+    error_probability: probablity that formalizes the extent to which the reader performs within-line regressions
+    fixations: fixations data
+    '''
+
+    line_coordinates = find_lines_Y(aois)
+    fixes_in_lines = [[] for _ in range(len(line_coordinates))]
+
+    for fix in fixations:
+        y = fix[1]
+
+        line = 0
+        diff_y = abs(y - line_coordinates[0])
+
+        for y_coor in line_coordinates:
+            if abs(y - y_coor) < diff_y:
+                diff_y = abs(y - y_coor)
+                line = line_coordinates.index(y_coor)
+
+        fixes_in_lines[line].append(fix)
 
 
-# droop
+    results = []
+    adjusted_prob = error_probability*0.1
+
+    #algorithm: if in probability, regress to the previous line and finish the previous line. Then finish the original line. Maximum one regression per line.
+    for line_num in range(len(fixes_in_lines)):
+        regressed = False
+
+        if line_num == 0:
+            for fix in fixes_in_lines[line_num]:
+                results.append(fix)
+        else:
+            for fix_num in range(len(fixes_in_lines[line_num])):
+                if fix_num == 0:
+                    results.append(fixes_in_lines[line_num][fix_num])
+                else:
+                    if regressed:
+                        results.append(fixes_in_lines[line_num][fix_num])
+                    else:
+                        if random.random() < adjusted_prob:
+                            regress_line = int(random.triangular(0, line_num, line_num))
+                            if fix_num >= (len(fixes_in_lines[regress_line])-1):
+                                begin_fix = len(fixes_in_lines[regress_line])-1
+                                results.append(fixes_in_lines[regress_line][begin_fix])
+                            else:
+                                begin_fix = fix_num
+                                end_fix = random.randint(fix_num, len(fixes_in_lines[regress_line]))
+                                for fix_num_prev in range(begin_fix, end_fix):
+                                    results.append(fixes_in_lines[regress_line][fix_num_prev])
+                            regressed = True
+                        else: 
+                            results.append(fixes_in_lines[line_num][fix_num])
+    
+    return results
+
 
 from PIL import ImageFont, ImageDraw, Image
 from matplotlib import pyplot as plt
@@ -196,40 +285,42 @@ def draw_correction(Image_file, fixations, match_list):
         x0, y0 = fixations[0]
 
     for index, fixation in enumerate(fixations):
+
+        if index < len(match_list):
         
-        if len(fixations[0]) == 3:
-            duration = fixation[2]
-            if 5 * (duration / 100) < 5:
-                r = 3
+            if len(fixations[0]) == 3:
+                duration = fixation[2]
+                if 5 * (duration / 100) < 5:
+                    r = 3
+                else:
+                     r = 5 * (duration / 100)
             else:
-                 r = 5 * (duration / 100)
-        else:
-            r = 8
+                r = 8
 
-        x = fixation[0]
-        y = fixation[1]
+            x = fixation[0]
+            y = fixation[1]
 
-        bound = (x - r, y - r, x + r, y + r)
-        outline_color = (50, 255, 0, 0)
-        
-        if match_list[index] == 1:
-        	fill_color = (50, 255, 0, 220)
-        else:
-        	fill_color = (255, 55, 0, 220)
+            bound = (x - r, y - r, x + r, y + r)
+            outline_color = (50, 255, 0, 0)
+            
+            if match_list[index] == 1:
+            	fill_color = (50, 255, 0, 220)
+            else:
+            	fill_color = (255, 55, 0, 220)
 
-        draw.ellipse(bound, fill=fill_color, outline=outline_color)
+            draw.ellipse(bound, fill=fill_color, outline=outline_color)
 
-        bound = (x0, y0, x, y)
-        line_color = (255, 155, 0, 155)
-        penwidth = 2
-        draw.line(bound, fill=line_color, width=5)
+            bound = (x0, y0, x, y)
+            line_color = (255, 155, 0, 155)
+            penwidth = 2
+            draw.line(bound, fill=line_color, width=5)
 
-        # text_bound = (x + random.randint(-10, 10), y + random.randint(-10, 10))
-        # text_color = (0, 0, 0, 225)
-        # font = ImageFont.truetype("arial.ttf", 20)
-        # draw.text(text_bound, str(index), fill=text_color,font=font)
+            # text_bound = (x + random.randint(-10, 10), y + random.randint(-10, 10))
+            # text_color = (0, 0, 0, 225)
+            # font = ImageFont.truetype("arial.ttf", 20)
+            # draw.text(text_bound, str(index), fill=text_color,font=font)
 
-        x0, y0 = x, y
+            x0, y0 = x, y
 
     plt.figure(figsize=(17, 15))
     plt.imshow(np.asarray(im), interpolation='nearest')
@@ -311,8 +402,9 @@ def correction_quality(aois, original_fixations, corrected_fixations):
         
         for _, row  in aois.iterrows():
             
-            if overlap(fix, row) and overlap(corrected_fixations[index], row):
-                match += 1
-                results[index] = 1
+            if index < len(corrected_fixations):
+                if overlap(fix, row) and overlap(corrected_fixations[index], row):
+                    match += 1
+                    results[index] = 1
                 
     return match / total_fixations, results
