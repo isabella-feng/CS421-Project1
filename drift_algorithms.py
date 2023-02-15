@@ -427,3 +427,29 @@ def dynamic_time_warping(sequence1, sequence2):
             j -= 1
     dtw_path[0].append(0)
     return dtw_cost[-1, -1], dtw_path
+
+import random
+#extension: Create a version of the Warp algorithm that detects within line regressions and adapts to them.
+def adapted_warp(fixation_XY, word_XY, line_Y):
+    
+    #algorithm: 1) randomly select a fixation 2) check its next 10 fixations, and check whether there are more than 2 backward in x value 
+
+    times_of_reg = 0
+
+    for i in range(10):
+        index = random.randint(0, len(fixation_XY)-11)
+
+        backwards = 0
+        for j in range(10):
+            if fixation_XY[index+j][0] > fixation_XY[index+j+1][0]:
+                backwards+=1
+
+        if backwards > 2:
+            times_of_reg += 1
+
+    if times_of_reg < 3:
+        return warp(fixation_XY, word_XY)
+    else:
+        return attach(fixation_XY, line_Y)
+
+
